@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <ctype.h>
 #include "wgrib2.h"
 #include "fnlist.h"
 
@@ -93,6 +94,7 @@ int f_irr_grid(ARG3) {
     unsigned int i;
     struct local_struct *save;
     const char *t;
+    char *file_list = NULL;
     unsigned char *p;
     double tmp;
     float *array;
@@ -104,9 +106,28 @@ int f_irr_grid(ARG3) {
         decode = latlon = 1;
         *local = save = (struct local_struct *)malloc( sizeof(struct local_struct));
         if (save == NULL) fatal_error("irr_grid: memory allocation","");
+        save->last_GDS_change_no = -1;
+
+        /* Prototype: @path reads the existing colon-separated list from a file. */
+        if (arg1[0] == '@') {
+            FILE *input = fopen(arg1 + 1, "rb");
+            long length = 0;
+            if (input == NULL) fatal_error("irr_grid: cannot open coordinate file %s", arg1 + 1);
+            if (fseek(input, 0, SEEK_END) != 0 || (length = ftell(input)) < 0 ||
+                fseek(input, 0, SEEK_SET) != 0) fatal_error("irr_grid: cannot read coordinate file %s", arg1 + 1);
+            file_list = malloc((size_t) length + 1);
+            if (file_list == NULL) fatal_error("irr_grid: memory allocation", "");
+            if (fread(file_list, 1, (size_t) length, input) != (size_t) length || fclose(input) != 0)
+                fatal_error("irr_grid: cannot read coordinate file %s", arg1 + 1);
+            if (memchr(file_list, '\0', (size_t) length) != NULL)
+                fatal_error("irr_grid: invalid coordinate file %s", arg1 + 1);
+            while (length > 0 && isspace((unsigned char) file_list[length - 1])) length--;
+            file_list[length] = '\0';
+            if (length == 0) fatal_error("irr_grid: empty coordinate file %s", arg1 + 1);
+        }
 
         /* count number of colons */
-        t = arg1;
+        t = file_list ? file_list : arg1;
         i = 0;
         while (*t) {
             if (*t++ == ':') i++;
@@ -126,17 +147,34 @@ int f_irr_grid(ARG3) {
         save->iptr = (int *) malloc(sizeof(int) * (size_t) save->ngrid);
         if (save->lon_lat_list == NULL || save->iptr == NULL ) fatal_error("irr_grid: memory allocation","");
 
-        t = arg1;
-        k = sscanf(t, "%lf%n", &tmp, &m);
-        if (k != 1) fatal_error("irr_grid: lat-lon list, %s",t);
-        save->lon_lat_list[0] = tmp;
-        t += m;
-        for (i = 1; i < 2*save->ngrid; i++) {
-            k = sscanf(t, ":%lf%n", &tmp, &m);
-            if (k != 1) fatal_error("irr_grid: lat-lon list, %s",t);
-            save->lon_lat_list[i] = tmp;
-            t += m;
+        t = file_list ? file_list : arg1;
+        if (file_list != NULL) {
+            char *end;
+            for (i = 0; i < 2*save->ngrid; i++) {
+                if (i > 0) {
+                    if (*t != ':') fatal_error("irr_grid: invalid coordinate file %s", arg1 + 1);
+                    t++;
+                }
+                tmp = strtod(t, &end);
+                if (end == t || !isfinite(tmp)) fatal_error("irr_grid: invalid coordinate file %s", arg1 + 1);
+                save->lon_lat_list[i] = tmp;
+                t = end;
+            }
+            if (*t != '\0') fatal_error("irr_grid: invalid coordinate file %s", arg1 + 1);
         }
+        else {
+            k = sscanf(t, "%lf%n", &tmp, &m);
+            if (k != 1) fatal_error("irr_grid: lat-lon list, %s",t);
+            save->lon_lat_list[0] = tmp;
+            t += m;
+            for (i = 1; i < 2*save->ngrid; i++) {
+                k = sscanf(t, ":%lf%n", &tmp, &m);
+                if (k != 1) fatal_error("irr_grid: lat-lon list, %s",t);
+                save->lon_lat_list[i] = tmp;
+                t += m;
+            }
+        }
+        free(file_list);
 
         for (i = 0 ; i < save->ngrid; i++) {
             tmp = save->lon_lat_list[i*2];
