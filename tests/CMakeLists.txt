@@ -291,3 +291,9 @@ if (FTP_TEST_FILES)
     shell_test(run_ftp_extra_large_tests)
   endif()
 endif()
+
+# Exercises row formatting, mapping lookup and partial local-infile reads.
+if (BUILD_EXTRA AND USE_MYSQL)
+  add_executable(mysql_optimize_test mysql_optimize_test.c)
+  add_test(NAME mysql_optimize_test COMMAND mysql_optimize_test)
+endif()

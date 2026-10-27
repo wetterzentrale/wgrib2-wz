@@ -18,6 +18,7 @@
 
 #include <mysql.h>
 #include "Mysql_connect.h"
+#include "Mysql_speed_common.h"
 
 
 extern int decode, GDS_change_no, new_GDS, latlon;
@@ -27,23 +28,12 @@ extern double *lat, *lon;
 #define MAX_NXNY   2000000
 #define MAX_SQL_INSERT 3000
 
-static double convunit(double val, char convstring[50]) {
-		
-	if (strcmp(convstring,"GPH_M")==0) val/=9.82;
-	else if (strcmp(convstring,"M_MM")==0) val*=1000;
-	else if (strcmp(convstring,"PERC_PART")==0 || strcmp(convstring,"PA_HPA")==0) val/=100;
-	else if (strcmp(convstring,"PART_PERC")==0) val*=100; 
-	else if (strcmp(convstring,"K_C")==0) val-=273.16;
-	return val;
-}
-
 /*
  * HEADER:100:mysql_speed:output:6:H=[host] U=[user] D=[db] T=[table] W=[western_lons:0|1] PV=[remove unlikely:0|1]
  */
 
 int f_mysql_speed(ARG6) {
 
-    char temp_pathname[STRING_SIZE];
     char sql[MAX_SQL_INSERT];
     char server[100];
     char user[100];
@@ -73,10 +63,11 @@ int f_mysql_speed(ARG6) {
 
     struct local_struct {
         MYSQL *conn;
-        FILE *temp_fileptr;
         unsigned int npts;
-        char *rows[MAX_NXNY];
-	char has_value[MAX_NXNY];
+        struct mysql_speed_row *rows;
+        struct mysql_speed_stream stream;
+        struct mysql_speed_mapping *mappings;
+        int has_rt;
         char *params;
         unsigned int isset;
         unsigned int wlon;
@@ -99,13 +90,9 @@ int f_mysql_speed(ARG6) {
 	*local = save = (struct local_struct *) malloc( sizeof(struct local_struct));
 	if (save == NULL) fatal_error("mysql_speed memory allocation ","");
 
-        for (i = 0; i < MAX_NXNY; i++) {
-	    save->rows[i] = NULL;
-	    save->has_value[i] = 0;
-	}
+        save->rows = NULL; save->npts = 0; save->mappings = NULL; save->has_rt = 1;
 	save->last_GDS_change_no = 0;
 	save->conn = mysql_init(NULL);
-	save->temp_fileptr= NULL;
 	save->params = (char *)  malloc(MAX_SQL_INSERT*sizeof(char));
 	sprintf(save->params,"%s","");
 	save->isset = 0;
@@ -127,39 +114,32 @@ int f_mysql_speed(ARG6) {
 	if (!wgrib2_mysql_connect(save->conn, server, user, database)) {
 	   fatal_error("f_mysql_speed: could not connect to %s", mysql_error(save->conn));
 	} 
+        /* Inspect the result metadata without interpolating a column name. */
+        snprintf(sql, sizeof(sql), "SELECT * FROM `%s` LIMIT 0", table);
+        if (mysql_query(save->conn, sql)) fatal_error("f_mysql_speed: table lookup failed: %s", mysql_error(save->conn));
+        res = mysql_store_result(save->conn);
+        if (!res) fatal_error("f_mysql_speed: table metadata failed: %s", mysql_error(save->conn));
+        save->has_rt = 0;
+        for (i = 0; i < mysql_num_fields(res); i++) if (strcmp(mysql_fetch_fields(res)[i].name, "rt") == 0) save->has_rt = 1;
+        mysql_free_result(res);
 	return 0;
     }
 
     /* cleanup phase */
 
     if (mode == -2) {
-    	save = (struct local_struct *) *local;
-    	
-    	strcpy(temp_pathname, "/tmp/wgrib2_mysqlXXXXXX");
-    	if ( -1 == (load_local_infile = mkstemp(temp_pathname)) ) {
-	    fatal_error("f_mysql_speed: error making temporary filename","");
-	}
-	if ( !(save->temp_fileptr = fdopen(load_local_infile, "w")) ) {
-	    fatal_error("f_mysql_speed: error making temporary filename","");
-	}
-
-    	fprintf(stdout, "Columns to insert: rt,vt,lat,lon%s\n", save->params);
-    	fprintf(save->temp_fileptr,"rt,vt,lat,lon%s\n",save->params);
-    	for (j = 0; j < save->npts; j++) {
-	    if (save->has_value[j] == 1) fprintf(save->temp_fileptr,"%s\n",save->rows[j]);
-	}
-	fflush(save->temp_fileptr);
-	sprintf(sql,"LOAD DATA LOCAL INFILE '%s' INTO TABLE %s FIELDS TERMINATED BY ',' ENCLOSED BY '\"' LINES TERMINATED BY '\\n' IGNORE 1 LINES (rt,vt,lat,lon%s)",temp_pathname,table,save->params);
-	printf("Inserting into database, table=%s \n",table);
-	printf("%s\n",sql);
-	/* send SQL query */
-	if (mysql_query(save->conn, sql)) {	
-	    fatal_error("f_mysql_speed: connection error %s", mysql_error(save->conn));
-	}
-	fclose(save->temp_fileptr);
-	remove(temp_pathname);
-    	mysql_close(save->conn);
-    	return 0;
+        int rc;
+        save = (struct local_struct *) *local;
+        save->stream.rows = save->rows;
+        save->stream.count = save->npts;
+        mysql_set_local_infile_handler(save->conn, mysql_speed_init, mysql_speed_read, mysql_speed_end, mysql_speed_error, &save->stream);
+        snprintf(sql, sizeof(sql), "LOAD DATA LOCAL INFILE 'wgrib2-memory' INTO TABLE %s FIELDS TERMINATED BY ',' ENCLOSED BY '\"' LINES TERMINATED BY '\\n' (%s%s)", table, (save->has_rt ? "rt,vt,lat,lon" : "vt,lat,lon"), save->params);
+        rc = mysql_query(save->conn, sql);
+        if (rc) fatal_error("f_mysql_speed: connection error %s", mysql_error(save->conn));
+        for (j = 0; j < save->npts; j++) free(save->rows[j].text);
+        mysql_speed_mapping_free(save->mappings);
+        free(save->rows); free(save->params); mysql_close(save->conn); free(save); *local = NULL;
+        return 0;
     }
 
     /* processing phase */
@@ -172,13 +152,13 @@ int f_mysql_speed(ARG6) {
   	save->npts = ndata;
   	if (ndata > MAX_NXNY) fatal_error_i("f_mysql_speed: MAX_NXNY exceeded %d", MAX_NXNY);
 
-	for (i = 0; i < ndata; i++) {
-	    if (save->rows[i] == NULL) {
-		save->rows[i] = (char *)  malloc(MAX_SQL_INSERT*sizeof(char));
-		if (save->rows[i] == NULL) fatal_error("f_mysql_speed: memory allocation problem","");
-	    }
-	    save->rows[i][0] = '\0';
-	}
+        save->rows = calloc(ndata, sizeof(*save->rows));
+        if (!save->rows && ndata) fatal_error("mysql_speed: row allocation failed", "");
+        for (i = 0; i < ndata; i++) {
+            save->rows[i].cap = 128;
+            save->rows[i].text = calloc(1, save->rows[i].cap);
+            if (!save->rows[i].text) fatal_error("mysql_speed: row allocation failed", "");
+        }
 
 	save->isset = 1;
 //    } else if (new_GDS) {
@@ -186,6 +166,7 @@ int f_mysql_speed(ARG6) {
 	fatal_error("f_mysql_speed, grid definition has to be the same for all fields","");
    }
    save->last_GDS_change_no = GDS_change_no;
+   if (ndata != save->npts) fatal_error("mysql_speed: field grid size changed", "");
  
     /*Collect runtime and validtime into vt and rt*/
 
@@ -219,24 +200,38 @@ int f_mysql_speed(ARG6) {
 
     ctr = GB2_Center(sec);
 
-    sprintf(sql,"select * from wgrib2_parameter_mapping where center_id=%d and wgrib_param_name='%s' and wgrib_param_levelname='%s'", ctr, name, level_buf);
-    fprintf(stderr,"SQL: %s\n", sql);
-    if (mysql_query(save->conn, sql)) {	
-	fatal_error("f_mysql_speed: mysql error %s", mysql_error(save->conn));
-    }
-    sprintf(new_level,"%s", "None");
-    sprintf(conv,"%s", "None");
-    sprintf(precision, "%s", "2");
-    printf("\nCenter_id: %d \n", ctr);
-    res = mysql_use_result(save->conn);
-    while ( (row = mysql_fetch_row(res) ) != NULL) {
-	printf("our_name: %s \n", row[3]);
-	sprintf(new_name,"%s", row[3]);
-	sprintf(new_level,"%s", row[4]);
-	sprintf(conv,"%s", row[5]);
-	sprintf(precision, "%s", row[6]);
-    }
+    {
+        /* Repeated ensemble members use the same mapping, including misses. */
+        struct mysql_speed_mapping *cached = mysql_speed_mapping_find(save->mappings, ctr, name, level_buf);
+        strcpy(new_name, ""); strcpy(new_level, "None"); strcpy(conv, "None"); strcpy(precision, "2");
+        if (cached) {
+            strcpy(new_name, cached->mapped_name); strcpy(new_level, cached->mapped_level);
+            strcpy(conv, cached->conv); strcpy(precision, cached->precision);
+        } else {
+        sprintf(sql,"select * from wgrib2_parameter_mapping where center_id=%d and wgrib_param_name='%s' and wgrib_param_levelname='%s'", ctr, name, level_buf);
+        fprintf(stderr,"SQL: %s\n", sql);
+        if (mysql_query(save->conn, sql)) {
+        fatal_error("f_mysql_speed: mysql error %s", mysql_error(save->conn));
+        }
+        printf("\nCenter_id: %d \n", ctr);
+        res = mysql_use_result(save->conn);
+        while ( (row = mysql_fetch_row(res) ) != NULL) {
+        printf("our_name: %s \n", row[3]);
+        sprintf(new_name,"%s", row[3]);
+        sprintf(new_level,"%s", row[4]);
+        sprintf(conv,"%s", row[5]);
+        sprintf(precision, "%s", row[6]);
+        }
 
+        mysql_free_result(res);
+        /* Preserve the last result if a mapping query returned multiple rows. */
+            cached = malloc(sizeof(*cached)); if (!cached) fatal_error("mysql_speed: mapping allocation failed", "");
+            cached->center = ctr; strcpy(cached->name, name); strcpy(cached->level, level_buf);
+            strcpy(cached->mapped_name, new_name); strcpy(cached->mapped_level, new_level);
+            strcpy(cached->conv, conv); strcpy(cached->precision, precision);
+            cached->next = save->mappings; save->mappings = cached;
+        }
+    }
     printf("val_precision: %s \n", precision);
     printf("conversion: %s \n", conv);
     printf("our_levelname: %s \n", new_level);
@@ -253,8 +248,8 @@ int f_mysql_speed(ARG6) {
 	}
     }
 	
-    mysql_free_result(res);
 
+    if (strlen(save->params) + strlen(param) + 2 >= MAX_SQL_INSERT) fatal_error("mysql_speed: too many columns", "");
     strcat(save->params,",");
     strcat(save->params,param);
 	
@@ -264,31 +259,23 @@ int f_mysql_speed(ARG6) {
     fprintf(stderr, "Remove unlikely: %d\n", save->remove_unlikely);
     fprintf(stderr, "Western longitudes: %d\n", save->wlon);
 
-    for (j = 0; j < ndata; j++) {
-	longitude = lon[j];
-	if (longitude > 180 && save->wlon==1) longitude-=360;
-	latitude = lat[j];
-	value = data[j];
-	if (save->remove_unlikely == 1 && value>0 && value<10e-8) value=0; 			
-	if (save->remove_unlikely == 1 && (strcmp(name,"APCP")==0 || strcmp(name,"ASNOW")==0 || strcmp(name,"ACPCP")==0 ) && value==1) value=0;
-	value = convunit(value, conv);
-	if (strlen(save->rows[j]) < 2) 	{
-	    if (!UNDEFINED_VAL(data[j])) {
-		save->has_value[j] = 1;
-		sprintf(save->rows[j],"\"%s\",\"%s\",%g,%g,%lg",rt,vt,latitude,longitude,value);
-	    } else {
-		sprintf(save->rows[j],"\"%s\",\"%s\",%g,%g,NULL",rt,vt,latitude,longitude);
-	    }
-	} else {
-	    if (!UNDEFINED_VAL(data[j])) {
-		save->has_value[j] = 1;
-		sprintf(sql,",%lg",value);
-	    } else {
-		sprintf(sql,",NULL");
-	    }
-	    strcat(save->rows[j],sql);
-	}
-
+    {
+        int conversion = mysql_speed_conversion(conv);
+        int precipitation = !strcmp(name,"APCP") || !strcmp(name,"ASNOW") || !strcmp(name,"ACPCP");
+        for (j = 0; j < ndata; j++) {
+            struct mysql_speed_row *r = &save->rows[j];
+            longitude = lon[j]; if (longitude > 180 && save->wlon == 1) longitude -= 360;
+            latitude = lat[j]; value = data[j];
+            if (save->remove_unlikely == 1 && value > 0 && value < 10e-8) value = 0;
+            if (save->remove_unlikely == 1 && precipitation && value == 1) value = 0;
+            value = mysql_speed_convert(value, conversion);
+            if (r->len == 0) {
+                if (save->has_rt) mysql_speed_append(r, "\"%s\",", rt);
+                mysql_speed_append(r, "\"%s\",%g,%g", vt, latitude, longitude);
+            }
+            if (!UNDEFINED_VAL(data[j])) { r->has_value = 1; mysql_speed_append_value(r, value); }
+            else mysql_speed_append_null(r);
+        }
     }
     return 0;
 }
