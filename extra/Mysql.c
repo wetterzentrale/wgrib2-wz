@@ -22,6 +22,7 @@
 #ifdef USE_MYSQL
 
 #include <mysql.h>
+#include "Mysql_connect.h"
 
 extern int decode;
 extern int latlon;
@@ -30,15 +31,14 @@ extern double *lat, *lon;
 
 
 /*
- * HEADER:100:mysql:output:5:H=[host] U=[user] P=[password] D=[db] T=[table]
+ * HEADER:100:mysql:output:4:H=[host] U=[user] D=[db] T=[table]
  */
 
-int f_mysql(ARG5) {
+int f_mysql(ARG4) {
 
     char sql[300];
     char server[100];
     char user[100];
-    char password[100]; 
     char database[100];
     char table[100];
 
@@ -62,9 +62,8 @@ int f_mysql(ARG5) {
 
     strcpy(server,arg1);
     strcpy(user,arg2);
-    strcpy(password,arg3);
-    strcpy(database,arg4);
-    strcpy(table,arg5);
+    strcpy(database,arg3);
+    strcpy(table,arg4);
 
 
     /* initialization phase */
@@ -78,7 +77,7 @@ int f_mysql(ARG5) {
 	save->conn = mysql_init(NULL);
 
 	/* Connect to database */
-	if (!mysql_real_connect(save->conn, server, user, password, database, 0, NULL, 0))
+	if (!wgrib2_mysql_connect(save->conn, server, user, database))
 	    fatal_error("mysql error %s", mysql_error(save->conn));
     }
 
@@ -146,7 +145,7 @@ int f_mysql(ARG5) {
 
 #else
 
-int f_mysql(ARG5) {
+int f_mysql(ARG4) {
     if (mode == -1) { fprintf(stderr,"mysql package not installed\n"); return 1; }
     return 0;
 }

@@ -1,3 +1,5 @@
+Passwords are read from the [wgrib2] group in MySQL option files.
+
 /******************************************************************************************
  Copyright (C) 2008 Niklas Sondell, Storm Weather Center
  MYSQL_speed is part of wgrib2 and could be distributed under terms of the GNU General Public License
@@ -23,7 +25,7 @@ Are by wgrib2 default set to 9.999e+20, this is set to NULL in the database inse
 /******************************************************************************************
 
 USAGE Example:
-wgrib2 [gribfile] -mysql_speed H=[host] U=[user] P=[password] D=[db] T=[table] W=[western_lons:0|1] PV=[remove unlikely:0|1] LATLON=[LonW:LonE:LatS:LatN]
+wgrib2 [gribfile] -mysql_speed H=[host] U=[user] D=[db] T=[table] W=[western_lons:0|1] PV=[remove unlikely:0|1] LATLON=[LonW:LonE:LatS:LatN]
 if remove_unlikely == 1 , values above zero that are smaller than 10e-8 are set to zero			
 if western_lons == 1, longitudes above 180 are subtracted with -360
 Use the undefine function to choose area and the mathc function to choose fields. 
@@ -124,4 +126,4 @@ alter table gfs add primary key (rt,vt,lat,lon);
 
 EXAMPLE of bulk insert from grib2 file
 
-wgrib2 gfs.t00z.pgrb2f162 -undefine out-box 0:30 40:70 -mysql localhost user passwd database table 1 1 -match "(APCP:surface)|(TCDC:(middle|high|low|entire))|(RH:(2 |850|925))|(UGRD:(10 m above|925|850))|(VGRD:(10 m above|925|850))|(PRMSL:mean )|(HGT:(925|850|surface))|(CSNOW:surface)|(TMP:(2 |925|850))|(TMAX:2 )|(TMIN:2 )|((DSWRF|USWRF|:LFTX|CAPE|ACPCP):surface)"
+wgrib2 gfs.t00z.pgrb2f162 -undefine out-box 0:30 40:70 -mysql_speed localhost user database table 1 1 -match "(APCP:surface)|(TCDC:(middle|high|low|entire))|(RH:(2 |850|925))|(UGRD:(10 m above|925|850))|(VGRD:(10 m above|925|850))|(PRMSL:mean )|(HGT:(925|850|surface))|(CSNOW:surface)|(TMP:(2 |925|850))|(TMAX:2 )|(TMIN:2 )|((DSWRF|USWRF|:LFTX|CAPE|ACPCP):surface)"

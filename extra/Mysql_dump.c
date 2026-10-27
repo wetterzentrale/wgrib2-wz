@@ -16,6 +16,7 @@
 #ifdef USE_MYSQL
 
 #include <mysql.h>
+#include "Mysql_connect.h"
 
 
 extern int decode, GDS_change_no, latlon;
@@ -36,16 +37,15 @@ static double convunit(double val, char convstring[50]) {
 }
 
 /*
- * HEADER:100:mysql_dump:output:7:H=[host] U=[user] P=[password] D=[db] T=[table] W=[western_lons:0|1] PV=[remove unlikely:0|1]
+ * HEADER:100:mysql_dump:output:6:H=[host] U=[user] D=[db] T=[table] W=[western_lons:0|1] PV=[remove unlikely:0|1]
  */
 
-int f_mysql_dump(ARG7) {
+int f_mysql_dump(ARG6) {
 
     char temp_pathname[STRING_SIZE];
     char sql[3000];
     char server[100];
     char user[100];
-    char password[100]; 
     char database[100];
     char table[100];
     MYSQL_RES *res;
@@ -88,9 +88,8 @@ int f_mysql_dump(ARG7) {
 
     strcpy(server,arg1);
     strcpy(user,arg2);
-    strcpy(password,arg3);
-    strcpy(database,arg4);
-    strcpy(table,arg5);
+    strcpy(database,arg3);
+    strcpy(table,arg4);
 
     /* initialization phase */
 
@@ -113,18 +112,18 @@ int f_mysql_dump(ARG7) {
 	save->validtime[0] = 0;
 	load_local_infile = 1;		// 1 = LOAD LOCAL INFILE,  0 = do not LOAD LOCAL INFILE
 
-	if (sscanf(arg6,"%d", &save->wlon) != 1) {
-            fatal_error("Argument 6, use western longitudes, has to be 0 or 1, error parsing %s", arg6);
+	if (sscanf(arg5,"%d", &save->wlon) != 1) {
+            fatal_error("Argument 5, use western longitudes, has to be 0 or 1, error parsing %s", arg5);
         }
-        if (sscanf(arg7,"%d", &save->remove_unlikely) != 1) {
-            fatal_error("Argument 7, remove unlikely values, has to be 0 or 1, error parsing %s", arg7);
+        if (sscanf(arg6,"%d", &save->remove_unlikely) != 1) {
+            fatal_error("Argument 6, remove unlikely values, has to be 0 or 1, error parsing %s", arg6);
         }
 	
 	/* Set options for database */
 	mysql_options(save->conn,MYSQL_OPT_LOCAL_INFILE, (char *) &load_local_infile);
 
 	/* Connect to database */
-	if (!mysql_real_connect(save->conn, server, user, password, database, 0, NULL, 0)) {
+	if (!wgrib2_mysql_connect(save->conn, server, user, database)) {
 	   fatal_error("f_mysql_speed: could not connect to %s", mysql_error(save->conn));
 	} 
 	save->last_GDS_change_no = 0;
@@ -306,7 +305,7 @@ int f_mysql_dump(ARG7) {
 
 #else
 
-int f_mysql_dump(ARG7) {
+int f_mysql_dump(ARG6) {
     if (mode == -1) { fprintf(stderr,"mysql package not installed\n"); return 1; }
     return 0;
 }

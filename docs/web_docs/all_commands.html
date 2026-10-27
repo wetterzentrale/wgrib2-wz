@@ -311,9 +311,9 @@ wgrib2 v0.1.9.4-beta2 6/2011 Wesley Ebisuzaki, Reinoud Bokhorst, Jaakko Hyvätti
  -irr_grid        out  X Y Z  make irregular grid, nearest neighbor, X=lon-lat list Y=radius (km) Z=output grib file
  <a href="./lola.html">-lola</a>            out  X..Z,A lon-lat grid values X=lon0:nlon:dlon Y=lat0:nlat:dlat Z=file A=[bin|text|spread|grib]
  -merge_fcst      out  X Y    normalize NCEP-type ave/acc X=number Y=output grib file
- -mysql           out  5 args H=[host] U=[user] P=[password] D=[db] T=[table] (alpha)
- -mysql_dump      out  7 args H=[host] U=[user] P=[password] D=[db] T=[table] W=[western_lons:0|1] PV=[remove unlikely:0|1]
- -mysql_speed     out  7 args H=[host] U=[user] P=[password] D=[db] T=[table] W=[western_lons:0|1] PV=[remove unlikely:0|1]
+ -mysql           out  4 args H=[host] U=[user] D=[db] T=[table] (alpha)
+ -mysql_dump      out  6 args H=[host] U=[user] D=[db] T=[table] W=[western_lons:0|1] PV=[remove unlikely:0|1]
+ -mysql_speed     out  6 args H=[host] U=[user] D=[db] T=[table] W=[western_lons:0|1] PV=[remove unlikely:0|1]
  <a href="./ncep_norm.html">-ncep_norm</a>       out  X      normalize NCEP-type ave/acc X=output grib file
  <a href="./ncep_uv.html">-ncep_uv</a>         out  X      combine U and V fields into one message like NCEP operations
  <a href="./netcdf.html">-netcdf</a>          out  X      write netcdf data to X

@@ -400,9 +400,10 @@ struct function functions[] = {
    {"tigge",f_tigge, setup, 0, "use modified-TIGGE grib table", 100},
    {"transient",f_transient, setup, 1, "make file X transient, CW2", 100},
    #ifdef BUILD_EXTRA
-   {"mysql",f_mysql, output, 5, "H=[host] U=[user] P=[password] D=[db] T=[table]", 100},
-   {"mysql_dump",f_mysql_dump, output, 7, "H=[host] U=[user] P=[password] D=[db] T=[table] W=[western_lons:0|1] PV=[remove unlikely:0|1]", 100},
-   {"mysql_speed",f_mysql_speed, output, 7, "H=[host] U=[user] P=[password] D=[db] T=[table] W=[western_lons:0|1] PV=[remove unlikely:0|1]", 100},
+   {"mysql",f_mysql, output, 4, "H=[host] U=[user] D=[db] T=[table]", 100},
+   {"mysql_dump",f_mysql_dump, output, 6, "H=[host] U=[user] D=[db] T=[table] W=[western_lons:0|1] PV=[remove unlikely:0|1]", 100},
+   {"mysql_speed",f_mysql_speed, output, 6, "H=[host] U=[user] D=[db] T=[table] W=[western_lons:0|1] PV=[remove unlikely:0|1]", 100},
+   {"mysql_speed_ens",f_mysql_speed_ens, output, 6, "H=[host] U=[user] D=[db] T=[table] W=[western_lons:0|1] PV=[remove unlikely:0|1]", 100},
    #endif
 };
 

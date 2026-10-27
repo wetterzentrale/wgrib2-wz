@@ -143,6 +143,20 @@ shell_test(run_wgrib2_delayed_err_tests)
 shell_test(run_smallest_grib_tests)
 shell_test(run_smallest_4_tests)
 
+if(MYSQL_INTEGRATION_TEST)
+  set(MYSQL_TEST_HOST "localhost" CACHE STRING "MySQL integration-test host")
+  set(MYSQL_TEST_DATABASE "" CACHE STRING "Disposable MySQL integration-test database")
+  set(MYSQL_TEST_CONFIG "" CACHE FILEPATH "MySQL integration-test option file")
+  find_program(MYSQL_TEST_CLIENT NAMES mariadb mysql)
+  if(NOT MYSQL_TEST_CLIENT OR NOT MYSQL_TEST_DATABASE OR NOT EXISTS "${MYSQL_TEST_CONFIG}")
+    message(FATAL_ERROR "MySQL integration test requires a mysql client, MYSQL_TEST_DATABASE, and an existing MYSQL_TEST_CONFIG")
+  endif()
+  add_test(NAME mysql_integration
+    COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/run_mysql_test.sh"
+      "$<TARGET_FILE:wgrib2_exe>" "${CMAKE_CURRENT_BINARY_DIR}/data/ref_simple_packing.grib2"
+      "${MYSQL_TEST_CLIENT}" "${MYSQL_TEST_HOST}" "${MYSQL_TEST_DATABASE}" "${MYSQL_TEST_CONFIG}")
+endif()
+
 if (USE_NETCDF)
   shell_test(run_wgrib2_netcdf4_tests)
   shell_test(run_wgrib2_netcdf3_tests)
