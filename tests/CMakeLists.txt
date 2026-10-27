@@ -297,3 +297,8 @@ if (BUILD_EXTRA AND USE_MYSQL)
   add_executable(mysql_optimize_test mysql_optimize_test.c)
   add_test(NAME mysql_optimize_test COMMAND mysql_optimize_test)
 endif()
+
+# File-based irregular grids must also work beyond the exec argument limit.
+add_test(NAME irr_grid_file COMMAND bash
+  ${CMAKE_SOURCE_DIR}/tests/test_irr_grid_file.sh
+  $<TARGET_FILE:wgrib2_exe> ${CMAKE_SOURCE_DIR}/tests/data/gdas.t12z.pgrb2.1p00.anl.75r.grib2)
