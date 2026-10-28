@@ -281,7 +281,6 @@ int f_mysql_dump(ARG6) {
 		latitude = lat[j];
 		value = data[j];
 		if (save->remove_unlikely == 1 && value>0 && value<10e-8) value=0; 			
-		if (ctr == 98 && save->remove_unlikely == 1 && (strcmp(name,"APCP")==0 || strcmp(name,"ASNOW")==0 || strcmp(name,"ACPCP")==0 ) && value==1) value=0;
 		if (longitude > 180 && (save->wlon==1)) longitude-=360;
 		value = convunit(value, conv);
 		if (strlen(save->rows[j]) < 2) 	{
