@@ -261,13 +261,11 @@ int f_mysql_speed(ARG6) {
 
     {
         int conversion = mysql_speed_conversion(conv);
-        int precipitation = !strcmp(name,"APCP") || !strcmp(name,"ASNOW") || !strcmp(name,"ACPCP");
         for (j = 0; j < ndata; j++) {
             struct mysql_speed_row *r = &save->rows[j];
             longitude = lon[j]; if (longitude > 180 && save->wlon == 1) longitude -= 360;
             latitude = lat[j]; value = data[j];
             if (save->remove_unlikely == 1 && value > 0 && value < 10e-8) value = 0;
-            if (save->remove_unlikely == 1 && precipitation && value == 1) value = 0;
             value = mysql_speed_convert(value, conversion);
             if (r->len == 0) {
                 if (save->has_rt) mysql_speed_append(r, "\"%s\",", rt);
